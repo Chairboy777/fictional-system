@@ -6,7 +6,12 @@
 //! API transcript and sends it back each turn, so the conversation (including
 //! thinking blocks) is replayed unchanged and append-only.
 //!
-//! Without a key, a simple command parser handles "add ET11", "remove ET11",
+//! With `OLLAMA_MODEL` set instead, the same request format goes to a local
+//! Ollama server (its Anthropic-compatible `/v1/messages` endpoint). The
+//! local model gets a shorter context: no agenda listing in the system prompt
+//! (it uses the search tools instead) and only the last few turns.
+//!
+//! Without either, a simple command parser handles "add ET11", "remove ET11",
 //! "find shiny", "what's on Tue 14:00" and "details ET11".
 
 use crate::model::{day_label, kind_label, Catalog, Kind};
@@ -15,10 +20,28 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Provider {
+    Anthropic,
+    Ollama,
+}
+
 pub struct ClaudeConfig {
+    pub provider: Provider,
+    /// Full URL of the Messages endpoint.
+    pub url: String,
     pub api_key: String,
     pub model: String,
     pub effort: String,
+}
+
+impl ClaudeConfig {
+    pub fn label(&self) -> &'static str {
+        match self.provider {
+            Provider::Anthropic => "Claude",
+            Provider::Ollama => "Ollama",
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -43,7 +66,12 @@ pub struct ChatResponse {
     pub error: bool,
 }
 
-const API_URL: &str = "https://api.anthropic.com/v1/messages";
+pub const API_URL: &str = "https://api.anthropic.com/v1/messages";
+/// Real user turns (not tool results) sent to a local model.
+const LOCAL_TURNS: usize = 3;
+
+const LOCAL_NOTE: &str = "You do not have the agenda listing in front of you. Always use search_sessions or \
+sessions_at to find sessions, and get_session before describing one. Only mention session keys that a tool returned.";
 const MAX_TOOL_ROUNDS: usize = 10;
 
 const SYSTEM_PROMPT: &str = "You help one attendee plan their personal itinerary for PHUSE EU Connect 2026, \
@@ -441,46 +469,58 @@ async fn claude_chat(state: &AppState, cfg: &ClaudeConfig, ctx: &mut Ctx<'_>, tr
         _ => messages.push(json!({"role": "user", "content": [{"type": "text", "text": text}]})),
     }
 
-    let system = json!([
-        {"type": "text", "text": SYSTEM_PROMPT},
-        {"type": "text", "text": state.catalogue_text, "cache_control": {"type": "ephemeral"}}
-    ]);
+    let local = cfg.provider == Provider::Ollama;
+    let system = if local {
+        json!([{"type": "text", "text": format!("{SYSTEM_PROMPT}\n\n{LOCAL_NOTE}")}])
+    } else {
+        json!([
+            {"type": "text", "text": SYSTEM_PROMPT},
+            {"type": "text", "text": state.catalogue_text, "cache_control": {"type": "ephemeral"}}
+        ])
+    };
     let tools = tools();
     let mut replies: Vec<String> = Vec::new();
 
     for _round in 0..MAX_TOOL_ROUNDS {
-        let body = json!({
-            "model": cfg.model,
-            "max_tokens": 16000,
-            "system": system,
-            "tools": tools,
-            "messages": messages,
-            "output_config": {"effort": cfg.effort},
-            "cache_control": {"type": "ephemeral"},
-            "fallbacks": "default"
-        });
-        let resp = state
-            .http
-            .post(API_URL)
-            .header("x-api-key", &cfg.api_key)
-            .header("anthropic-version", "2026-10-21")
-            .header("anthropic-beta", "server-side-fallback-2026-07-01")
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await;
-        let resp = match resp {
+        let body = if local {
+            json!({
+                "model": cfg.model,
+                "max_tokens": 4000,
+                "system": system,
+                "tools": tools,
+                "messages": local_window(&messages),
+                "thinking": {"type": "disabled"}
+            })
+        } else {
+            json!({
+                "model": cfg.model,
+                "max_tokens": 16000,
+                "system": system,
+                "tools": tools,
+                "messages": messages,
+                "output_config": {"effort": cfg.effort},
+                "cache_control": {"type": "ephemeral"},
+                "fallbacks": "default"
+            })
+        };
+        let mut req = state.http.post(&cfg.url).header("content-type", "application/json").header("anthropic-version", "2026-10-21");
+        if !local {
+            req = req.header("x-api-key", &cfg.api_key).header("anthropic-beta", "server-side-fallback-2026-07-01");
+        }
+        let name = cfg.label();
+        let resp = match req.json(&body).send().await {
             Ok(r) => r,
+            Err(e) if local => return failure(ctx, original, format!("Could not reach Ollama at {} – is it running? ({e})", cfg.url)),
             Err(e) => return failure(ctx, original, format!("Could not reach the Claude API: {e}")),
         };
         let status = resp.status();
         let value: Value = match resp.json().await {
             Ok(v) => v,
-            Err(e) => return failure(ctx, original, format!("Unreadable response from the Claude API ({status}): {e}")),
+            Err(e) => return failure(ctx, original, format!("Unreadable response from {name} ({status}): {e}")),
         };
         if !status.is_success() {
-            let msg = value["error"]["message"].as_str().unwrap_or("unknown error");
-            return failure(ctx, original, format!("Claude API error {}: {msg}", status.as_u16()));
+            let msg = value["error"]["message"].as_str().or(value["error"].as_str()).unwrap_or("unknown error");
+            return failure(ctx, original, format!("{name} error {}: {msg}", status.as_u16()));
         }
 
         let content = value["content"].clone();
@@ -529,6 +569,32 @@ async fn claude_chat(state: &AppState, cfg: &ClaudeConfig, ctx: &mut Ctx<'_>, tr
     ChatResponse { reply, transcript: messages, items: std::mem::take(&mut ctx.items), profile: ctx.profile.clone(), actions: std::mem::take(&mut ctx.actions), error: false }
 }
 
+/// The slice of the conversation sent to a local model: the last few real
+/// user turns, with the bulky <current_state> block kept only in the newest.
+fn local_window(messages: &[Value]) -> Vec<Value> {
+    let is_turn = |m: &Value| m["role"] == "user" && m["content"].as_array().is_some_and(|c| c.iter().any(|b| b["type"] == "text"));
+    let starts: Vec<usize> = messages.iter().enumerate().filter(|(_, m)| is_turn(m)).map(|(i, _)| i).collect();
+    let from = starts.len().checked_sub(LOCAL_TURNS).map(|k| starts[k]).unwrap_or(0);
+    let newest = starts.last().copied().unwrap_or(0);
+    messages[from..]
+        .iter()
+        .enumerate()
+        .map(|(off, m)| {
+            let mut m = m.clone();
+            if from + off != newest {
+                for b in m["content"].as_array_mut().into_iter().flatten() {
+                    if let Some(t) = b["text"].as_str() {
+                        if let Some(end) = t.find("</current_state>") {
+                            b["text"] = json!(t[end + "</current_state>".len()..].trim_start());
+                        }
+                    }
+                }
+            }
+            m
+        })
+        .collect()
+}
+
 /// On API failure return the transcript unchanged (so the message can be
 /// retried) but keep any itinerary changes already made this turn.
 fn failure(ctx: &mut Ctx<'_>, original: Vec<Value>, msg: String) -> ChatResponse {
@@ -542,7 +608,7 @@ fn failure(ctx: &mut Ctx<'_>, original: Vec<Value>, msg: String) -> ChatResponse
     }
 }
 
-const OFFLINE_HELP: &str = "Chat with Claude is not configured (set ANTHROPIC_API_KEY), so I understand simple commands:\n\
+const OFFLINE_HELP: &str = "Chat with a language model is not configured (set ANTHROPIC_API_KEY or OLLAMA_MODEL), so I understand simple commands:\n\
 • **add ET11** / **remove ET11**\n\
 • **details ET11**\n\
 • **find** shiny (optionally: find shiny on Tue)\n\

@@ -74,14 +74,28 @@ async fn main() -> anyhow::Result<()> {
     };
     println!("Loaded {} sessions (fetched {})", catalog.sessions.len(), catalog.fetched_at);
 
-    let claude = std::env::var("ANTHROPIC_API_KEY").ok().filter(|k| !k.trim().is_empty()).map(|api_key| chat::ClaudeConfig {
-        api_key,
-        model: env_or("CLAUDE_MODEL", "claude-opus-5-5"),
-        effort: env_or("CLAUDE_EFFORT", "medium"),
-    });
+    let set = |k: &str| std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    let claude = if let Some(api_key) = set("ANTHROPIC_API_KEY") {
+        Some(chat::ClaudeConfig {
+            provider: chat::Provider::Anthropic,
+            url: chat::API_URL.into(),
+            api_key,
+            model: env_or("CLAUDE_MODEL", "claude-opus-5-5"),
+            effort: env_or("CLAUDE_EFFORT", "medium"),
+        })
+    } else {
+        set("OLLAMA_MODEL").map(|model| chat::ClaudeConfig {
+            provider: chat::Provider::Ollama,
+            url: format!("{}/v1/messages", env_or("OLLAMA_URL", "http://localhost:11434").trim_end_matches('/')),
+            api_key: String::new(),
+            model,
+            effort: String::new(),
+        })
+    };
     match &claude {
+        Some(c) if c.provider == chat::Provider::Ollama => println!("Chat: Ollama ({}) at {}", c.model, c.url),
         Some(c) => println!("Chat: Claude ({}, effort {})", c.model, c.effort),
-        None => println!("Chat: ANTHROPIC_API_KEY not set — using the built-in command parser"),
+        None => println!("Chat: no ANTHROPIC_API_KEY or OLLAMA_MODEL — using the built-in command parser"),
     }
 
     let state = Arc::new(AppState {
@@ -135,7 +149,7 @@ async fn meta(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         "fetched_at": st.catalog.fetched_at,
         "days": st.catalog.days().iter().map(|d| json!({"date": d, "label": model::day_label(d)})).collect::<Vec<_>>(),
         "streams": streams.into_values().collect::<Vec<_>>(),
-        "chat": st.claude.as_ref().map(|c| json!({"model": c.model})),
+        "chat": st.claude.as_ref().map(|c| json!({"model": c.model, "provider": c.label()})),
     }))
 }
 

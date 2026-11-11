@@ -9,6 +9,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}
       CLAUDE_EFFORT: ${CLAUDE_EFFORT:-medium}
+      # Alternative to an API key: a local model served by Ollama on this Mac.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       # Set to 1 to pull the latest agenda from the PHUSE site at start-up.
       REFRESH_ON_START: ${REFRESH_ON_START:-1}
     restart: unless-stopped

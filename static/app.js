@@ -538,8 +538,10 @@ async function init() {
 
   $("#eventLine").innerHTML = `${esc(meta.event)} · Glasgow<span class="fetched"> · agenda fetched ${esc(meta.fetched_at)}</span>`;
   $("#chatMode").textContent = meta.chat
-    ? `Chatting with Claude (${meta.chat.model}). Changes apply to your itinerary straight away.`
-    : "Claude is not configured on this server, so the chat understands simple commands: add ET11, remove ET11, details ET11, find shiny, what's on Tue 14:00.";
+    ? (meta.chat.provider === "Ollama"
+        ? `Chatting with a local model (${meta.chat.model} via Ollama). Replies can take a little while; changes apply to your itinerary straight away.`
+        : `Chatting with Claude (${meta.chat.model}). Changes apply to your itinerary straight away.`)
+    : "No chat model is configured on this server, so the chat understands simple commands: add ET11, remove ET11, details ET11, find shiny, what's on Tue 14:00.";
   $("#streamChips").innerHTML = meta.streams.map((s) => `<button type="button" class="chip" data-stream="${esc(s.name)}" title="${s.count} sessions"><span class="badge" style="--h:${hue(s.code)}">${esc(s.code)}</span> ${esc(s.name)}</button>`).join("");
   $("#dayChecks").innerHTML = meta.days.map((d) => `<label><input type="checkbox" value="${d.date}" checked> ${esc(d.label)}${d.date === "2026-11-15" ? " <span class='muted small'>(workshops)</span>" : ""}</label>`).join("");
   $("#browseDay").innerHTML = `<option value="">All days</option>` + meta.days.map((d) => `<option value="${d.date}">${esc(d.label)}</option>`).join("");

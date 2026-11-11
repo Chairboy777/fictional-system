@@ -16,7 +16,25 @@ docker compose up --build
 # open http://localhost:8080
 ```
 
-Without an API key everything still works except the chat. The chat then accepts simple commands instead:
+### Chat with a local model instead (Ollama)
+
+No API key? The chat can use a model running on your own machine with [Ollama](https://ollama.com). Ollama's
+default context window (4,096 tokens) is too small, so create a copy of the model with a larger one:
+
+```bash
+printf 'FROM qwen3:8b\nPARAMETER num_ctx 16384\n' > Modelfile
+ollama create qwen3-planner -f Modelfile
+echo "OLLAMA_MODEL=qwen3-planner" >> .env
+docker compose up --build
+```
+
+Keep the Ollama app running. Expect replies to take up to a minute on a laptop, and less judgement than Claude: the
+local model sees only the last few turns and has to search the agenda rather than having it all in view. If
+`ANTHROPIC_API_KEY` is also set, Claude is used.
+
+### No chat model
+
+Without either, everything still works except the chat. The chat then accepts simple commands instead:
 `add ET11`, `remove ET11`, `details ET11`, `find shiny on Tue`, `what's on Tue 14:00`.
 
 | Variable | Default | Purpose |
@@ -24,6 +42,8 @@ Without an API key everything still works except the chat. The chat then accepts
 | `ANTHROPIC_API_KEY` | – | Enables chat with Claude |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | Model used for chat |
 | `CLAUDE_EFFORT` | `medium` | `low` makes replies faster and cheaper |
+| `OLLAMA_MODEL` | – | Use a local Ollama model for chat when there is no API key, e.g. `qwen3-planner` |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` in compose | Where Ollama is listening |
 | `REFRESH_ON_START` | `1` in compose | Pull the latest agenda from the PHUSE site at start-up; falls back to `data/sessions.json` |
 | `PORT` | `8080` | |
 
@@ -52,7 +72,8 @@ src/
   model.rs      Session / Speaker / Catalog types; clash rules (posters share one session, so never clash).
   text.rs       HTML→text, tokenising, light stemming (incl. -ise/-ize).
   recommend.rs  Scoring and itinerary building (below).
-  chat.rs       Claude tool-use loop over the Messages API (raw HTTP), plus the offline command parser.
+  chat.rs       Tool-use loop over the Messages API (raw HTTP) for Claude, or Ollama's compatible endpoint,
+                plus the offline command parser.
   main.rs       axum server; the static UI in static/ is compiled into the binary.
 ```
 

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect Planner</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◆</span>
+    <div>
+      <h1>Connect Planner</h1>
+      <p class="sub" id="eventLine">PHUSE EU Connect 2026 · Glasgow</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="ghost" id="editProfileBtn" hidden>Edit interests</button>
+    <button class="ghost" id="resetBtn" title="Clear interests, itinerary and chat">Start over</button>
+  </div>
+</header>
+
+<main>
+  <!-- Step 1: interests -->
+  <section id="setup" class="panel setup">
+    <div class="setup-head">
+      <h2>What do you want from Connect?</h2>
+      <p class="muted">Separate items with commas or new lines. Anything you leave empty is simply ignored.</p>
+    </div>
+    <form id="profileForm" autocomplete="off">
+      <div class="grid2">
+        <label class="field">
+          <span class="label">Your existing interests</span>
+          <span class="hint">What you already work with, e.g. SDTM, R Shiny, SAS macros</span>
+          <textarea id="f_existing" rows="3" data-field="existing"></textarea>
+        </label>
+        <label class="field">
+          <span class="label">New interests</span>
+          <span class="hint">What you want to learn about, e.g. LLMs, Rust, real-world evidence</span>
+          <textarea id="f_new" rows="3" data-field="new_interests"></textarea>
+        </label>
+        <label class="field">
+          <span class="label">Key topics</span>
+          <span class="hint">Must-cover topics; these carry the most weight</span>
+          <textarea id="f_topics" rows="3" data-field="topics"></textarea>
+        </label>
+        <label class="field">
+          <span class="label">Presenters you'd like to see</span>
+          <span class="hint">Names or companies, e.g. Jane Smith, Roche</span>
+          <textarea id="f_presenters" rows="3" data-field="presenters"></textarea>
+        </label>
+      </div>
+
+      <div class="field">
+        <span class="label">Streams</span>
+        <span class="hint">Click to add a stream to the box you were last typing in</span>
+        <div id="streamChips" class="chips"></div>
+      </div>
+
+      <div class="row-options">
+        <fieldset class="field">
+          <legend class="label">Days</legend>
+          <div id="dayChecks" class="checks"></div>
+        </fieldset>
+        <fieldset class="field">
+          <legend class="label">Something different</legend>
+          <div class="seg" role="radiogroup">
+            <label><input type="radio" name="discovery" value="0"> None</label>
+            <label><input type="radio" name="discovery" value="1" checked> A few</label>
+            <label><input type="radio" name="discovery" value="2"> Plenty</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="primary" id="buildBtn">Build my itinerary</button>
+        <span class="muted small" id="keepNote"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- Step 2: itinerary + chat -->
+  <section id="workspace" class="workspace" hidden>
+    <div class="plan panel">
+      <div class="plan-toolbar">
+        <div class="tabs" id="dayTabs" role="tablist"></div>
+        <div class="toolbar-actions">
+          <button class="ghost" id="browseBtn">Browse all</button>
+          <button class="ghost" id="shuffleBtn" title="Pick different 'something different' sessions">Shuffle new picks</button>
+          <button class="ghost" id="icsBtn" title="Download your itinerary as a calendar file">Export .ics</button>
+          <button class="ghost" id="printBtn">Print</button>
+        </div>
+      </div>
+      <div class="legend small muted">
+        <span><span class="dot why-match"></span>Matches your interests</span>
+        <span><span class="dot why-presenter"></span>Presenter you asked for</span>
+        <span><span class="dot why-discovery"></span>Something different</span>
+        <span><span class="dot why-keynote"></span>Keynote</span>
+        <span><span class="dot why-pinned"></span>Chosen by you</span>
+      </div>
+      <div id="browse" class="browse" hidden>
+        <div class="browse-filters">
+          <input type="search" id="browseQuery" placeholder="Search titles, abstracts, presenters, companies…">
+          <select id="browseDay"></select>
+          <select id="browseStream"></select>
+        </div>
+        <div id="browseList"></div>
+      </div>
+      <div id="dayView"></div>
+    </div>
+
+    <aside class="chat panel" aria-label="Chat">
+      <div class="chat-head">
+        <h2>Refine with chat</h2>
+        <button class="ghost small" id="clearChatBtn">Clear</button>
+      </div>
+      <p class="muted small" id="chatMode"></p>
+      <div id="chatLog" class="chat-log" aria-live="polite"></div>
+      <div class="suggestions" id="suggestions"></div>
+      <form id="chatForm" class="chat-form">
+        <textarea id="chatInput" rows="2" placeholder="e.g. Swap anything advanced for beginner sessions on Tuesday"></textarea>
+        <button type="submit" class="primary" id="sendBtn">Send</button>
+      </form>
+    </aside>
+  </section>
+</main>
+
+<dialog id="sessionDialog">
+  <div id="sessionDialogBody"></div>
+  <form method="dialog" class="dialog-actions"><button class="ghost">Close</button></form>
+</dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

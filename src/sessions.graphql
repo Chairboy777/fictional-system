@@ -1,0 +1,187 @@
+fragment CoreSessionFields on Session {
+  id
+  locale
+  __typename
+}
+
+query Sessions($eventId: ID!, $environment: String!, $eventSnapshotVersion: String!, $accountSnapshotVersion: String, $regTypeId: String, $token: String, $limit: Int, $sort: String, $filter: FilterDsl, $timezone: String, $sessionCustomFieldsFilter: [SessionCustomFieldsFilter], $limitByEmptyRegistration: Boolean, $locale: String, $resolveAccountTranslations: Boolean, $resolveTagTranslations: Boolean) {
+  event(
+    input: {eventId: $eventId, environment: $environment, eventSnapshotVersion: $eventSnapshotVersion, accountSnapshotVersion: $accountSnapshotVersion, timezone: $timezone, cultureCode: $locale}
+  ) {
+    id
+    sessions(
+      token: $token
+      limit: $limit
+      regTypeId: $regTypeId
+      sort: $sort
+      filter: $filter
+      sessionCustomFieldsFilter: $sessionCustomFieldsFilter
+      limitByEmptyRegistration: $limitByEmptyRegistration
+      locale: $locale
+    ) {
+      data {
+        ...CoreSessionFields
+        name
+        nameKey
+        translatedName
+        startDateTime
+        endDateTime
+        startTimeOnly
+        startDateOnly
+        showOnAgenda
+        featuredSession
+        isIncludedSession
+        visible
+        displayPriority
+        code
+        presentationType
+        associatedRegistrationTypes
+        categoryId
+        category {
+          id
+          name
+          description
+          __typename
+        }
+        sessionLocation {
+          id
+          locationName
+          locationCode
+          __typename
+        }
+        description
+        descriptionKey
+        translatedDescription
+        speakerIds {
+          id
+          sessionSpeakerOrder
+          __typename
+        }
+        speakers {
+          id
+          prefix
+          firstName
+          lastName
+          company
+          title
+          facebookUrl
+          linkedInUrl
+          twitterUrl
+          displayOnWebsite
+          biography
+          profilePictureUri
+          websites {
+            relatedUrl
+            isDisplay
+            relatedUrlName
+            relatedUrlCategory {
+              id
+              __typename
+            }
+            __typename
+          }
+          contentTags(resolveTagTranslations: $resolveTagTranslations) {
+            id
+            contentTagText
+            __typename
+          }
+          __typename
+        }
+        capacity {
+          inPerson {
+            available
+            total
+            __typename
+          }
+          virtual {
+            available
+            total
+            __typename
+          }
+          __typename
+        }
+        contentTags(resolveTagTranslations: $resolveTagTranslations) {
+          id
+          contentTagText
+          __typename
+        }
+        isWaitlistEnabled
+        waitlistCapacity {
+          inPerson {
+            available
+            total
+            __typename
+          }
+          virtual {
+            available
+            total
+            __typename
+          }
+          __typename
+        }
+        applicableAdmissionItems
+        applicableContactTypes
+        sessionCustomFieldIds
+        sessionCustomFieldQuestions(
+          resolveAccountTranslations: $resolveAccountTranslations
+        ) {
+          questionServiceEntityType
+          question {
+            code
+            questionTypeInfo {
+              ... on OpenEndedDateTimeQuestionTypeInfo {
+                questionType
+                __typename
+              }
+              __typename
+            }
+            additionalInfo {
+              additionalInfoType
+              required
+              helpText
+              __typename
+            }
+            html
+            id
+            widgetId
+            text
+            translatedText(resolveAccountTranslations: $resolveAccountTranslations)
+            __typename
+          }
+          customFieldCategory
+          defaultTagText
+          order
+          showOnWizard
+          useDataTag
+          consentFlag
+          lastModifiedDate
+          __typename
+        }
+        sessionCustomFieldValues {
+          id
+          sessionId
+          displayValue
+          answers
+          translatedDisplayValue(resolveAccountTranslations: $resolveAccountTranslations)
+          __typename
+        }
+        attendingFormats {
+          inPerson
+          virtual
+          __typename
+        }
+        __typename
+      }
+      paginationMetadata {
+        currentToken
+        nextToken
+        previousToken
+        limit
+        totalCount
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}

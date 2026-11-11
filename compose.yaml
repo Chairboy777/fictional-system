@@ -1,0 +1,14 @@
+services:
+  planner:
+    build: .
+    image: phuse-planner
+    ports:
+      - "8080:8080"
+    environment:
+      # Optional: enables chat with Claude. Put it in a .env file next to this one.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}
+      CLAUDE_EFFORT: ${CLAUDE_EFFORT:-medium}
+      # Set to 1 to pull the latest agenda from the PHUSE site at start-up.
+      REFRESH_ON_START: ${REFRESH_ON_START:-1}
+    restart: unless-stopped
